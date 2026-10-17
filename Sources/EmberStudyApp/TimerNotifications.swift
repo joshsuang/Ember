@@ -1,66 +1,94 @@
 import Foundation
-import AppKit
 import UserNotifications
+#if os(macOS)
+import AppKit
+#elseif os(iOS)
+import UIKit
+import AudioToolbox
+#endif
 
 @MainActor
 enum TimerNotifications {
     private static let timerRequestID = "ember.timer.completion"
     private static var permissionRequested = false
+    static var onPermissionRequired: (() -> Void)?
+    static var isEnabled = true
+
+    private static func center() -> UNUserNotificationCenter? {
+        guard isEnabled, Bundle.main.bundleURL.pathExtension == "app" else { return nil }
+        return UNUserNotificationCenter.current()
+    }
 
     static func scheduleCompletion(at date: Date, kind: SessionKind, mode: TimerMode, sound: Bool) {
         guard date > Date() else { return }
-        let content = UNMutableNotificationContent()
-        content.title = kind.isStudy ? "Focus session complete" : "Break is over"
-        content.body = kind.isStudy ? "Lovely work. Your focus block is finished." : "Your break is over. Ready when you are."
-        content.sound = sound ? .default : nil
-        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: max(1, date.timeIntervalSinceNow), repeats: false)
-        let request = UNNotificationRequest(identifier: timerRequestID, content: content, trigger: trigger)
-        let center = UNUserNotificationCenter.current()
-        center.getNotificationSettings { settings in
-            guard settings.authorizationStatus == .authorized else {
-                requestPermissionIfNeeded()
-                return
-            }
-            center.add(request) { _ in }
-        }
+        deliver(
+            identifier: timerRequestID,
+            title: kind.isStudy ? "Focus session complete" : "Break is over",
+            body: kind.isStudy ? "Lovely work. Your focus block is finished." : "Your break is over. Ready when you are.",
+            sound: sound,
+            deliveryDate: date
+        )
     }
 
     static func postCompletion(kind: SessionKind, mode: TimerMode) {
-        let content = UNMutableNotificationContent()
-        content.title = kind.isStudy ? "Focus session complete" : "Break is over"
-        content.body = kind.isStudy ? "Lovely work. Your focus block is finished." : "Your break is over. Ready when you are."
-        let request = UNNotificationRequest(identifier: "ember.timer.finished.\(UUID().uuidString)", content: content, trigger: nil)
-        let center = UNUserNotificationCenter.current()
-        center.getNotificationSettings { settings in
-            guard settings.authorizationStatus == .authorized else { requestPermissionIfNeeded(); return }
-            center.add(request) { _ in }
-        }
+        deliver(
+            identifier: "ember.timer.finished.\(UUID().uuidString)",
+            title: kind.isStudy ? "Focus session complete" : "Break is over",
+            body: kind.isStudy ? "Lovely work. Your focus block is finished." : "Your break is over. Ready when you are.",
+            sound: false,
+            deliveryDate: nil
+        )
     }
 
     static func postGoalReached() {
-        let content = UNMutableNotificationContent()
-        content.title = "Daily study goal reached"
-        content.body = "You made time for your learning today. Nicely done."
-        let request = UNUserNotificationRequest(identifier: "ember.goal.\(Calendar.current.startOfDay(for: Date()).timeIntervalSince1970)", content: content, trigger: nil)
-        let center = UNUserNotificationCenter.current()
-        center.getNotificationSettings { settings in
-            guard settings.authorizationStatus == .authorized else { requestPermissionIfNeeded(); return }
-            center.add(request) { _ in }
-        }
+        let dayKey = Int(Calendar.current.startOfDay(for: Date()).timeIntervalSince1970)
+        deliver(
+            identifier: "ember.goal.\(dayKey)",
+            title: "Daily study goal reached",
+            body: "You made time for your learning today. Nicely done.",
+            sound: false,
+            deliveryDate: nil
+        )
     }
 
     static func cancelTimer() {
-        let center = UNUserNotificationCenter.current()
-        center.removePendingNotificationRequests(withIdentifiers: [timerRequestID])
+        center()?.removePendingNotificationRequests(withIdentifiers: [timerRequestID])
     }
 
     static func playCompletionSound() {
+        #if os(macOS)
         NSSound(named: NSSound.Name("Glass"))?.play()
+        #elseif os(iOS)
+        AudioServicesPlaySystemSound(1007)
+        #endif
     }
 
-    private static func requestPermissionIfNeeded() {
+    static func requestPermission() {
         guard !permissionRequested else { return }
         permissionRequested = true
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
+        center()?.requestAuthorization(options: [.alert, .sound]) { _, _ in }
+    }
+
+    private static func deliver(identifier: String, title: String, body: String, sound: Bool, deliveryDate: Date?) {
+        guard let center = center() else { return }
+        center.getNotificationSettings { settings in
+            let authorization = settings.authorizationStatus
+            Task { @MainActor in
+                guard authorization == .authorized || authorization == .provisional else {
+                    onPermissionRequired?()
+                    return
+                }
+                let content = UNMutableNotificationContent()
+                content.title = title
+                content.body = body
+                content.sound = sound ? .default : nil
+                let trigger: UNNotificationTrigger? = deliveryDate.map {
+                    UNTimeIntervalNotificationTrigger(timeInterval: max(1, $0.timeIntervalSinceNow), repeats: false)
+                }
+                let request = UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
+                do { try await UNUserNotificationCenter.current().add(request) }
+                catch { /* Timer completion remains independent of notification delivery. */ }
+            }
+        }
     }
 }

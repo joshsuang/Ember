@@ -126,9 +126,9 @@ struct WeeklySummaryCard: View {
                     Spacer()
                     HStack(spacing: 4) {
                         Image(systemName: store.weeklyChange >= 0 ? "arrow.up.right" : "arrow.down.right")
-                        Text("\(Int(abs(store.weeklyChange) * 100))%")
+                        Text("\(store.previousWeekTotal == 0 ? "—" : "\(Int(abs(store.weeklyChange) * 100))%")")
                     }.font(.system(size: 9, weight: .semibold)).foregroundStyle(store.weeklyChange >= 0 ? Color.accentColor : Color.emberMuted)
-                    Text("vs last week").font(.system(size: 8)).foregroundStyle(Color.emberMuted)
+                    Text(store.previousWeekTotal == 0 ? "no prior week" : "vs last week").font(.system(size: 8)).foregroundStyle(Color.emberMuted)
                 }
                 HStack(alignment: .bottom, spacing: 9) {
                     ForEach(Array(zip(store.weekDates, store.weekStudyMinutes).enumerated()), id: \.offset) { _, item in
@@ -164,7 +164,7 @@ struct StatisticsView: View {
                     StatTile(title: "This week", value: compactDuration(store.weekTotal), note: "study time", icon: "clock.fill")
                     StatTile(title: "Daily average", value: compactDuration(store.weekAverage), note: "this week", icon: "chart.bar.fill")
                     StatTile(title: "Goals reached", value: "\(store.goalsReachedThisWeek) / \(store.elapsedDaysThisWeek)", note: "this week", icon: "checkmark.circle.fill")
-                    StatTile(title: "Change", value: "\(store.weeklyChange >= 0 ? "+" : "−")\(Int(abs(store.weeklyChange) * 100))%", note: "vs last week", icon: "arrow.up.right")
+                    StatTile(title: "Change", value: store.previousWeekTotal == 0 ? "—" : "\(store.weeklyChange >= 0 ? "+" : "−")\(Int(abs(store.weeklyChange) * 100))%", note: store.previousWeekTotal == 0 ? "no prior week" : "vs last week", icon: "arrow.up.right")
                 }
                 WeeklySummaryCard(store: store)
                 YearCalendarCard(store: store, selectedDay: .constant(nil))

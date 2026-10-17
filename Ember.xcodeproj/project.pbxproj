@@ -12,6 +12,9 @@
 		A10000000000000000000005 /* EmberStudyApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000005 /* EmberStudyApp.swift */; };
 		A10000000000000000000006 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000006 /* SettingsView.swift */; };
 		A10000000000000000000007 /* TimerViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000007 /* TimerViews.swift */; };
+		A10000000000000000000008 /* CloudSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000010 /* CloudSync.swift */; };
+		A10000000000000000000009 /* MobileViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000011 /* MobileViews.swift */; };
+		A1000000000000000000000A /* TimerNotifications.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000012 /* TimerNotifications.swift */; };
 /* End PBXBuildFile section */
 /* Begin PBXFileReference section */
 		B10000000000000000000001 /* CalendarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarView.swift; sourceTree = "<group>"; };
@@ -23,35 +26,47 @@
 		B10000000000000000000007 /* TimerViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimerViews.swift; sourceTree = "<group>"; };
 		B10000000000000000000008 /* Ember-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Ember-Info.plist"; sourceTree = "<group>"; };
 		B10000000000000000000009 /* Ember.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Ember.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		B1000000000000000000000A /* CloudSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudSync.swift; sourceTree = "<group>"; };
+		B1000000000000000000000B /* MobileViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MobileViews.swift; sourceTree = "<group>"; };
+		B1000000000000000000000C /* TimerNotifications.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimerNotifications.swift; sourceTree = "<group>"; };
+		B1000000000000000000000D /* Ember.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Ember.entitlements; sourceTree = "<group>"; };
+		B1000000000000000000000E /* Ember-iOS-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Ember-iOS-Info.plist"; sourceTree = "<group>"; };
+		B1000000000000000000000F /* Ember-iOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Ember-iOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 /* Begin PBXFrameworksBuildPhase section */
 		C10000000000000000000001 /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		C10000000000000000000002 /* iOS Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXFrameworksBuildPhase section */
 /* Begin PBXGroup section */
 		D10000000000000000000001 = {isa = PBXGroup; children = (D10000000000000000000002 /* EmberStudyApp */, D10000000000000000000004 /* Build settings */, D10000000000000000000003 /* Products */, ); sourceTree = "<group>"; };
-		D10000000000000000000002 /* EmberStudyApp */ = {isa = PBXGroup; path = Sources/EmberStudyApp; sourceTree = "<group>"; children = (B10000000000000000000001, B10000000000000000000002, B10000000000000000000003, B10000000000000000000004, B10000000000000000000005, B10000000000000000000006, B10000000000000000000007, ); };
-		D10000000000000000000003 /* Products */ = {isa = PBXGroup; children = (B10000000000000000000009 /* Ember.app */, ); name = Products; sourceTree = "<group>"; };
-		D10000000000000000000004 /* Build settings */ = {isa = PBXGroup; children = (B10000000000000000000008 /* Ember-Info.plist */, ); name = "Build settings"; sourceTree = "<group>"; };
+		D10000000000000000000002 /* EmberStudyApp */ = {isa = PBXGroup; path = Sources/EmberStudyApp; sourceTree = "<group>"; children = (B10000000000000000000001, B10000000000000000000002, B10000000000000000000003, B10000000000000000000004, B10000000000000000000005, B10000000000000000000006, B10000000000000000000007, B1000000000000000000000A, B1000000000000000000000B, B1000000000000000000000C, ); };
+		D10000000000000000000003 /* Products */ = {isa = PBXGroup; children = (B10000000000000000000009 /* Ember.app */, B1000000000000000000000F /* Ember-iOS.app */, ); name = Products; sourceTree = "<group>"; };
+		D10000000000000000000004 /* Build settings */ = {isa = PBXGroup; children = (B10000000000000000000008 /* Ember-Info.plist */, B1000000000000000000000D /* Ember.entitlements */, B1000000000000000000000E /* Ember-iOS-Info.plist */, ); name = "Build settings"; sourceTree = "<group>"; };
 /* End PBXGroup section */
 /* Begin PBXNativeTarget section */
 		E10000000000000000000001 /* Ember */ = {isa = PBXNativeTarget; buildConfigurationList = F10000000000000000000001 /* Build configuration list for PBXNativeTarget "Ember" */; buildPhases = (C10000000000000000000001 /* Frameworks */, E10000000000000000000002 /* Sources */, ); buildRules = (); dependencies = (); name = Ember; productName = Ember; productReference = B10000000000000000000009 /* Ember.app */; productType = "com.apple.product-type.application"; };
+		E10000000000000000000003 /* Ember iOS */ = {isa = PBXNativeTarget; buildConfigurationList = F10000000000000000000008 /* Build configuration list for PBXNativeTarget "Ember iOS" */; buildPhases = (C10000000000000000000002 /* iOS Frameworks */, E10000000000000000000004 /* iOS Sources */, ); buildRules = (); dependencies = (); name = "Ember iOS"; productName = Ember; productReference = B1000000000000000000000F /* Ember-iOS.app */; productType = "com.apple.product-type.application"; };
 /* End PBXNativeTarget section */
 /* Begin PBXSourcesBuildPhase section */
-		E10000000000000000000002 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000001, A10000000000000000000002, A10000000000000000000003, A10000000000000000000004, A10000000000000000000005, A10000000000000000000006, A10000000000000000000007, ); runOnlyForDeploymentPostprocessing = 0; };
+		E10000000000000000000002 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000001, A10000000000000000000002, A10000000000000000000003, A10000000000000000000004, A10000000000000000000005, A10000000000000000000006, A10000000000000000000007, A10000000000000000000008, A1000000000000000000000A, ); runOnlyForDeploymentPostprocessing = 0; };
+		E10000000000000000000004 /* iOS Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000001, A10000000000000000000002, A10000000000000000000003, A10000000000000000000004, A10000000000000000000005, A10000000000000000000006, A10000000000000000000007, A10000000000000000000008, A10000000000000000000009, A1000000000000000000000A, ); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXSourcesBuildPhase section */
 /* Begin XCBuildConfiguration section */
-		F10000000000000000000002 /* Debug */ = {isa = XCBuildConfiguration; buildSettings = {CLANG_ENABLE_OBJC_ARC = YES; MACOSX_DEPLOYMENT_TARGET = 14.0; PRODUCT_BUNDLE_IDENTIFIER = app.ember.study; PRODUCT_NAME = Ember; SDKROOT = macosx; SWIFT_VERSION = 5.0; INFOPLIST_FILE = "$(SRCROOT)/Ember-Info.plist"; GENERATE_INFOPLIST_FILE = NO; }; name = Debug; };
-		F10000000000000000000003 /* Release */ = {isa = XCBuildConfiguration; buildSettings = {CLANG_ENABLE_OBJC_ARC = YES; MACOSX_DEPLOYMENT_TARGET = 14.0; PRODUCT_BUNDLE_IDENTIFIER = app.ember.study; PRODUCT_NAME = Ember; SDKROOT = macosx; SWIFT_VERSION = 5.0; INFOPLIST_FILE = "$(SRCROOT)/Ember-Info.plist"; GENERATE_INFOPLIST_FILE = NO; }; name = Release; };
-		F10000000000000000000004 /* Project */ = {isa = XCBuildConfiguration; buildSettings = {CLANG_ENABLE_MODULES = YES; CLANG_ENABLE_OBJC_ARC = YES; MACOSX_DEPLOYMENT_TARGET = 14.0; SDKROOT = macosx; SWIFT_VERSION = 5.0;  }; name = Debug; };
-		F10000000000000000000005 /* Project */ = {isa = XCBuildConfiguration; buildSettings = {CLANG_ENABLE_MODULES = YES; CLANG_ENABLE_OBJC_ARC = YES; MACOSX_DEPLOYMENT_TARGET = 14.0; SDKROOT = macosx; SWIFT_VERSION = 5.0;  }; name = Release; };
+		F10000000000000000000002 /* macOS Debug */ = {isa = XCBuildConfiguration; buildSettings = {CLANG_ENABLE_OBJC_ARC = YES; CODE_SIGN_ENTITLEMENTS = Ember.entitlements; MACOSX_DEPLOYMENT_TARGET = 14.0; PRODUCT_BUNDLE_IDENTIFIER = app.ember.study; PRODUCT_NAME = Ember; SDKROOT = macosx; SWIFT_VERSION = 5.0; INFOPLIST_FILE = "$(SRCROOT)/Ember-Info.plist"; GENERATE_INFOPLIST_FILE = NO; }; name = Debug; };
+		F10000000000000000000003 /* macOS Release */ = {isa = XCBuildConfiguration; buildSettings = {CLANG_ENABLE_OBJC_ARC = YES; CODE_SIGN_ENTITLEMENTS = Ember.entitlements; MACOSX_DEPLOYMENT_TARGET = 14.0; PRODUCT_BUNDLE_IDENTIFIER = app.ember.study; PRODUCT_NAME = Ember; SDKROOT = macosx; SWIFT_VERSION = 5.0; INFOPLIST_FILE = "$(SRCROOT)/Ember-Info.plist"; GENERATE_INFOPLIST_FILE = NO; }; name = Release; };
+		F10000000000000000000004 /* Project Debug */ = {isa = XCBuildConfiguration; buildSettings = {CLANG_ENABLE_MODULES = YES; CLANG_ENABLE_OBJC_ARC = YES; MACOSX_DEPLOYMENT_TARGET = 14.0; SDKROOT = macosx; SWIFT_VERSION = 5.0; }; name = Debug; };
+		F10000000000000000000005 /* Project Release */ = {isa = XCBuildConfiguration; buildSettings = {CLANG_ENABLE_MODULES = YES; CLANG_ENABLE_OBJC_ARC = YES; MACOSX_DEPLOYMENT_TARGET = 14.0; SDKROOT = macosx; SWIFT_VERSION = 5.0; }; name = Release; };
+		F10000000000000000000006 /* iOS Debug */ = {isa = XCBuildConfiguration; buildSettings = {CODE_SIGN_ENTITLEMENTS = Ember.entitlements; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = "$(SRCROOT)/Ember-iOS-Info.plist"; IPHONEOS_DEPLOYMENT_TARGET = 17.0; PRODUCT_BUNDLE_IDENTIFIER = app.ember.study; PRODUCT_NAME = Ember; SDKROOT = iphoneos; SWIFT_VERSION = 5.0; TARGETED_DEVICE_FAMILY = 1; }; name = Debug; };
+		F10000000000000000000007 /* iOS Release */ = {isa = XCBuildConfiguration; buildSettings = {CODE_SIGN_ENTITLEMENTS = Ember.entitlements; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = "$(SRCROOT)/Ember-iOS-Info.plist"; IPHONEOS_DEPLOYMENT_TARGET = 17.0; PRODUCT_BUNDLE_IDENTIFIER = app.ember.study; PRODUCT_NAME = Ember; SDKROOT = iphoneos; SWIFT_VERSION = 5.0; TARGETED_DEVICE_FAMILY = 1; }; name = Release; };
 /* End XCBuildConfiguration section */
 /* Begin XCConfigurationList section */
-		F10000000000000000000006 /* Build configuration list for PBXNativeTarget "Ember" */ = {isa = XCConfigurationList; buildConfigurations = (F10000000000000000000002, F10000000000000000000003, ); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
-		F10000000000000000000007 /* Build configuration list for PBXProject "Ember" */ = {isa = XCConfigurationList; buildConfigurations = (F10000000000000000000004, F10000000000000000000005, ); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+		F10000000000000000000001 /* Build configuration list for PBXNativeTarget "Ember" */ = {isa = XCConfigurationList; buildConfigurations = (F10000000000000000000002, F10000000000000000000003, ); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+		F10000000000000000000008 /* Build configuration list for PBXNativeTarget "Ember iOS" */ = {isa = XCConfigurationList; buildConfigurations = (F10000000000000000000006, F10000000000000000000007, ); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+		F10000000000000000000009 /* Build configuration list for PBXProject "Ember" */ = {isa = XCConfigurationList; buildConfigurations = (F10000000000000000000004, F10000000000000000000005, ); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
 /* End XCConfigurationList section */
 /* Begin PBXProject section */
-		F10000000000000000000008 /* Project object */ = {isa = PBXProject; attributes = {BuildIndependentTargetsInParallel = YES; LastUpgradeCheck = 1600; TargetAttributes = {E10000000000000000000001 = {CreatedOnToolsVersion = 16.0; }; }; }; buildConfigurationList = F10000000000000000000007 /* Build configuration list for PBXProject "Ember" */; compatibilityVersion = "Xcode 14.0"; developmentRegion = en; hasScannedForEncodings = 0; knownRegions = (en, Base, ); mainGroup = D10000000000000000000001; productRefGroup = D10000000000000000000003 /* Products */; projectDirPath = ""; projectRoot = ""; targets = (E10000000000000000000001 /* Ember */, ); };
+		F1000000000000000000000A /* Project object */ = {isa = PBXProject; attributes = {BuildIndependentTargetsInParallel = YES; LastUpgradeCheck = 1600; TargetAttributes = {E10000000000000000000001 = {CreatedOnToolsVersion = 16.0; }; E10000000000000000000003 = {CreatedOnToolsVersion = 16.0; }; }; }; buildConfigurationList = F10000000000000000000009 /* Build configuration list for PBXProject "Ember" */; compatibilityVersion = "Xcode 14.0"; developmentRegion = en; hasScannedForEncodings = 0; knownRegions = (en, Base, ); mainGroup = D10000000000000000000001; productRefGroup = D10000000000000000000003 /* Products */, projectDirPath = ""; projectRoot = ""; targets = (E10000000000000000000001 /* Ember */, E10000000000000000000003 /* Ember iOS */, ); };
 /* End PBXProject section */
 	};
-	rootObject = F10000000000000000000008 /* Project object */;
+	rootObject = F1000000000000000000000A /* Project object */;
 }

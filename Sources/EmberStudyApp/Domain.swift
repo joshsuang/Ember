@@ -2,6 +2,10 @@ import Foundation
 import SwiftUI
 import Combine
 
+extension Notification.Name {
+    static let emberCloudStateUpdated = Notification.Name("ember.cloud.state-updated")
+}
+
 // MARK: - App and preference models
 
 enum AppSection: String, CaseIterable, Identifiable {
@@ -55,7 +59,7 @@ enum AccentChoice: String, CaseIterable, Identifiable, Codable {
     }
 }
 
-struct StudySettings: Codable {
+struct StudySettings: Codable, Equatable {
     var weekdayGoals: [Int: Int] = [1: 60, 2: 60, 3: 60, 4: 60, 5: 60, 6: 45, 7: 30]
     var focusMinutes = 25
     var shortBreakMinutes = 5
@@ -100,7 +104,7 @@ struct StudySettings: Codable {
 
 // MARK: - Session accounting
 
-enum StudySessionStatus: String, Codable {
+enum StudySessionStatus: String, Codable, Equatable {
     case running, paused, completed
 }
 
@@ -119,6 +123,7 @@ struct StudySession: Identifiable, Codable, Equatable {
     var kind: SessionKind
     var status: StudySessionStatus = .completed
     var intervals: [StudyInterval] = []
+    var modifiedAt = Date()
     var isRunning: Bool { status == .running }
     var isPaused: Bool { status == .paused }
 
@@ -126,8 +131,8 @@ struct StudySession: Identifiable, Codable, Equatable {
         intervals.isEmpty ? max(0, duration) : max(duration, intervals.reduce(0) { $0 + $1.seconds(asOf: date) })
     }
 
-    private enum CodingKeys: String, CodingKey { case id, start, end, duration, kind, status, intervals }
-    init(id: UUID = UUID(), start: Date, end: Date?, duration: TimeInterval, kind: SessionKind, status: StudySessionStatus = .completed, intervals: [StudyInterval] = []) {
+    private enum CodingKeys: String, CodingKey { case id, start, end, duration, kind, status, intervals, modifiedAt }
+    init(id: UUID = UUID(), start: Date, end: Date?, duration: TimeInterval, kind: SessionKind, status: StudySessionStatus = .completed, intervals: [StudyInterval] = [], modifiedAt: Date = Date()) {
         self.id = id
         self.start = start
         self.end = end
@@ -135,6 +140,7 @@ struct StudySession: Identifiable, Codable, Equatable {
         self.kind = kind
         self.status = status
         self.intervals = intervals
+        self.modifiedAt = modifiedAt
         if self.intervals.isEmpty, duration > 0, let end, end >= start {
             self.intervals = [StudyInterval(start: start, end: end)]
         }
@@ -151,6 +157,7 @@ struct StudySession: Identifiable, Codable, Equatable {
             intervals = [StudyInterval(start: start, end: end)]
         }
         status = try values.decodeIfPresent(StudySessionStatus.self, forKey: .status) ?? (end == nil ? .running : .completed)
+        modifiedAt = try values.decodeIfPresent(Date.self, forKey: .modifiedAt) ?? end ?? start
     }
 }
 
@@ -165,15 +172,22 @@ struct StudyDay: Identifiable {
 
 // MARK: - Versioned local application state
 
-struct PersistedStudyData: Codable {
-    var schemaVersion = 2
+struct PersistedStudyData: Codable, Equatable {
+    var schemaVersion = 3
+    var updatedAt = Date()
+    var settingsUpdatedAt = Date()
+    var timerUpdatedAt = Date()
+    var resetAt = Date.distantPast
+    var deletedSessionIDs: Set<UUID> = []
     var settings = StudySettings()
     var sessions: [StudySession] = []
     var activeMode = TimerMode.pomodoro
     var remaining = 25 * 60.0
     var elapsed = 0.0
+    var stopwatchStartedAt: Date?
     var selectedYear = Calendar.current.component(.year, from: Date())
     var completedFocusSessions = 0
+    var completedFocusSessionIDs: Set<UUID> = []
     var selectedKind: SessionKind = .focus
     var timerBaseDuration = 25 * 60.0
     var targetDate = Date()
@@ -185,20 +199,28 @@ struct PersistedStudyData: Codable {
 
     private enum CodingKeys: String, CodingKey {
         case schemaVersion, settings, sessions, activeMode, remaining, elapsed, selectedYear
-        case completedFocusSessions, selectedKind, timerBaseDuration, targetDate
+        case updatedAt, settingsUpdatedAt, timerUpdatedAt, resetAt, deletedSessionIDs
+        case completedFocusSessions, completedFocusSessionIDs, selectedKind, timerBaseDuration, targetDate, stopwatchStartedAt
         case timerRunning, timerStartedAt, timerDeadline, timerSessionID, notifiedGoalDays
     }
     init() {}
     init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         schemaVersion = try values.decodeIfPresent(Int.self, forKey: .schemaVersion) ?? 1
+        updatedAt = try values.decodeIfPresent(Date.self, forKey: .updatedAt) ?? .distantPast
+        settingsUpdatedAt = try values.decodeIfPresent(Date.self, forKey: .settingsUpdatedAt) ?? updatedAt
+        timerUpdatedAt = try values.decodeIfPresent(Date.self, forKey: .timerUpdatedAt) ?? updatedAt
+        resetAt = try values.decodeIfPresent(Date.self, forKey: .resetAt) ?? .distantPast
+        deletedSessionIDs = try values.decodeIfPresent(Set<UUID>.self, forKey: .deletedSessionIDs) ?? []
         settings = try values.decodeIfPresent(StudySettings.self, forKey: .settings) ?? StudySettings()
         sessions = try values.decodeIfPresent([StudySession].self, forKey: .sessions) ?? []
         activeMode = (try? values.decode(TimerMode.self, forKey: .activeMode)) ?? .pomodoro
         remaining = max(0, try values.decodeIfPresent(TimeInterval.self, forKey: .remaining) ?? 25 * 60)
         elapsed = max(0, try values.decodeIfPresent(TimeInterval.self, forKey: .elapsed) ?? 0)
+        stopwatchStartedAt = try values.decodeIfPresent(Date.self, forKey: .stopwatchStartedAt)
         selectedYear = try values.decodeIfPresent(Int.self, forKey: .selectedYear) ?? Calendar.current.component(.year, from: Date())
         completedFocusSessions = max(0, try values.decodeIfPresent(Int.self, forKey: .completedFocusSessions) ?? 0)
+        completedFocusSessionIDs = try values.decodeIfPresent(Set<UUID>.self, forKey: .completedFocusSessionIDs) ?? []
         selectedKind = (try? values.decode(SessionKind.self, forKey: .selectedKind)) ?? .focus
         timerBaseDuration = max(1, try values.decodeIfPresent(TimeInterval.self, forKey: .timerBaseDuration) ?? remaining)
         targetDate = try values.decodeIfPresent(Date.self, forKey: .targetDate) ?? Date()
@@ -218,9 +240,14 @@ struct PersistedStudyData: Codable {
 
 @MainActor
 final class StudyStore: ObservableObject {
-    @Published var data: PersistedStudyData { didSet { save() } }
+    @Published var data: PersistedStudyData { didSet { dataDidChange(from: oldValue) } }
     @Published private(set) var persistenceError: String?
     let storageURL: URL
+    @Published private(set) var cloudSyncStatus: CloudSyncStatus = .waiting
+    @Published private(set) var cloudSyncMessage: String?
+    private var isUpdatingMetadata = false
+    private var isApplyingCloudState = false
+    private var cloudSync: CloudSyncCoordinator?
     private let calendar = Calendar.current
     private let encoder = JSONEncoder()
     private let defaults: UserDefaults
@@ -231,6 +258,7 @@ final class StudyStore: ObservableObject {
         storageURL = directory.appendingPathComponent("study-data.json")
         var loaded = false
         var loadWarning: String?
+        var selectedData = PersistedStudyData()
         if let raw = try? Data(contentsOf: storageURL), let decoded = try? JSONDecoder().decode(PersistedStudyData.self, from: raw) {
             var restored = decoded
             if restored.timerRunning, let id = restored.timerSessionID, restored.sessions.contains(where: { $0.id == id && $0.isRunning }) {
@@ -248,10 +276,8 @@ final class StudyStore: ObservableObject {
                     restored.sessions[index].end = restored.sessions[index].intervals.last?.end ?? restored.sessions[index].start
                 }
             }
-            data = restored
+            selectedData = restored
             loaded = true
-            if restored.schemaVersion != 2 { var migrated = restored; migrated.schemaVersion = 2; data = migrated }
-            else { save() }
         } else if FileManager.default.fileExists(atPath: storageURL.path) {
             let quarantine = storageURL.appendingPathExtension("invalid-\(Int(Date().timeIntervalSince1970))")
             do { try FileManager.default.copyItem(at: storageURL, to: quarantine); loadWarning = "Stored study data was invalid. A backup was kept at \(quarantine.lastPathComponent), and Ember started with empty history." }
@@ -266,17 +292,50 @@ final class StudyStore: ObservableObject {
             }
             initial.sessions = []
             initial.completedFocusSessions = 0
-            data = initial
-            save()
+            selectedData = initial
         }
+        if selectedData.schemaVersion != 3 { selectedData.schemaVersion = 3 }
+        data = selectedData
         if let loadWarning { persistenceError = loadWarning }
         encoder.outputFormatting = [.sortedKeys]
-        if data.schemaVersion != 2 {
-            var migrated = data
-            migrated.schemaVersion = 2
-            data = migrated
-        }
+        if loadWarning == nil { save() }
         defaults.removeObject(forKey: "ember.study.prototype.v1")
+        cloudSync = CloudSyncCoordinator(store: self, defaults: defaults)
+        cloudSync?.start()
+    }
+
+    private func dataDidChange(from oldValue: PersistedStudyData) {
+        guard !isUpdatingMetadata else { return }
+        if isApplyingCloudState {
+            save()
+            return
+        }
+        let now = Date()
+        isUpdatingMetadata = true
+        if oldValue.settings != data.settings && oldValue.settingsUpdatedAt == data.settingsUpdatedAt { data.settingsUpdatedAt = now }
+        if timerControlChanged(from: oldValue, to: data) && oldValue.timerUpdatedAt == data.timerUpdatedAt { data.timerUpdatedAt = now }
+        let oldSessions = Dictionary(uniqueKeysWithValues: oldValue.sessions.map { ($0.id, $0) })
+        for index in data.sessions.indices {
+            if let old = oldSessions[data.sessions[index].id], old != data.sessions[index], old.modifiedAt == data.sessions[index].modifiedAt {
+                data.sessions[index].modifiedAt = now
+            }
+        }
+        if oldValue.updatedAt == data.updatedAt { data.updatedAt = now }
+        isUpdatingMetadata = false
+        save()
+        if !isApplyingCloudState && shouldScheduleCloudSync(from: oldValue, to: data) { cloudSync?.schedule(data) }
+    }
+
+    private func shouldScheduleCloudSync(from old: PersistedStudyData, to new: PersistedStudyData) -> Bool {
+        old.settings != new.settings || old.settingsUpdatedAt != new.settingsUpdatedAt ||
+        timerControlChanged(from: old, to: new) || old.timerUpdatedAt != new.timerUpdatedAt ||
+        old.resetAt != new.resetAt || old.deletedSessionIDs != new.deletedSessionIDs ||
+        old.sessions != new.sessions || old.completedFocusSessions != new.completedFocusSessions ||
+        old.completedFocusSessionIDs != new.completedFocusSessionIDs || old.notifiedGoalDays != new.notifiedGoalDays
+    }
+
+    private func timerControlChanged(from old: PersistedStudyData, to new: PersistedStudyData) -> Bool {
+        old.activeMode != new.activeMode || old.targetDate != new.targetDate || old.selectedKind != new.selectedKind || old.timerBaseDuration != new.timerBaseDuration || old.timerRunning != new.timerRunning || old.timerStartedAt != new.timerStartedAt || old.timerDeadline != new.timerDeadline || old.timerSessionID != new.timerSessionID || old.stopwatchStartedAt != new.stopwatchStartedAt
     }
 
     private func save() {
@@ -291,14 +350,43 @@ final class StudyStore: ObservableObject {
     }
 
     func resetUserData() {
-        data = PersistedStudyData()
+        var reset = PersistedStudyData()
+        reset.resetAt = Date()
+        reset.selectedYear = Calendar.current.component(.year, from: reset.resetAt)
+        reset.updatedAt = reset.resetAt
+        reset.settingsUpdatedAt = reset.resetAt
+        reset.timerUpdatedAt = reset.resetAt
+        reset.deletedSessionIDs = data.deletedSessionIDs.union(data.sessions.map(\.id))
+        reset.completedFocusSessionIDs = data.completedFocusSessionIDs
+        reset.completedFocusSessions = reset.completedFocusSessionIDs.count
+        data = reset
         defaults.removeObject(forKey: "ember.study.prototype.v1")
     }
     func clearPersistenceError() { persistenceError = nil }
+    func startCloudSync() { cloudSync?.start() }
+    func syncNow() { cloudSync?.syncNow() }
+
+    func updateCloudState(_ remote: PersistedStudyData) {
+        let merged = mergeStudyData(data, remote)
+        guard merged != data else { return }
+        isApplyingCloudState = true
+        data = merged
+        isApplyingCloudState = false
+        save()
+        cloudSync?.schedule(merged)
+        NotificationCenter.default.post(name: .emberCloudStateUpdated, object: nil)
+    }
+    func setCloudSyncStatus(_ status: CloudSyncStatus, message: String? = nil) {
+        cloudSyncStatus = status
+        cloudSyncMessage = message ?? {
+            if case .unavailable(let description) = status { return description }
+            return nil
+        }()
+    }
 
     func goal(for date: Date) -> Int { data.settings.goal(for: date, calendar: calendar) }
     func studySeconds(on date: Date, asOf now: Date = Date()) -> TimeInterval {
-        data.sessions.reduce(0) { $0 + studySeconds(in: $1, during: date, calendar: calendar, asOf: now) }
+        unionStudySeconds(sessions: data.sessions, during: date, calendar: calendar, asOf: now)
     }
     func studyMinutes(on date: Date) -> Int { Int(studySeconds(on: date) / 60) }
     var todayMinutes: Int { studyMinutes(on: Date()) }
@@ -307,24 +395,23 @@ final class StudyStore: ObservableObject {
 
     func sessions(on date: Date) -> [StudySession] {
         guard let range = calendar.dateInterval(of: .day, for: date) else { return [] }
-        var slices: [StudySession] = []
-        for session in data.sessions {
-            if session.intervals.isEmpty {
-                guard calendar.isDate(session.start, inSameDayAs: date) else { continue }
-                slices.append(session)
-                continue
-            }
-            for interval in session.intervals {
+        return data.sessions.compactMap { session in
+            let pieces = session.intervals.compactMap { interval -> StudyInterval? in
                 let start = max(range.start, interval.start)
                 let rawEnd = interval.end ?? Date()
                 let end = min(range.end, rawEnd)
-                guard end > start else { continue }
-                let active = interval.end == nil
-                let clipped = StudyInterval(id: interval.id, start: start, end: active ? nil : end)
-                slices.append(StudySession(id: interval.id, start: start, end: active ? nil : end, duration: end.timeIntervalSince(start), kind: session.kind, status: active ? .running : .completed, intervals: [clipped]))
+                guard end > start else { return nil }
+                return StudyInterval(id: interval.id, start: start, end: interval.end == nil ? nil : end)
             }
-        }
-        return slices.sorted { $0.start < $1.start }
+            if pieces.isEmpty {
+                if session.intervals.isEmpty && calendar.isDate(session.start, inSameDayAs: date) { return session }
+                return nil
+            }
+            let first = pieces.min(by: { $0.start < $1.start })!
+            let last = pieces.max(by: { ($0.end ?? Date()) < ($1.end ?? Date()) })!
+            let live = session.status == .running && pieces.contains(where: { $0.end == nil })
+            return StudySession(id: session.id, start: first.start, end: live ? nil : last.end, duration: pieces.reduce(0) { $0 + $1.seconds() }, kind: session.kind, status: live ? .running : session.status, intervals: pieces)
+        }.sorted { $0.start < $1.start }
     }
 
     func days(in year: Int) -> [StudyDay] {
@@ -357,7 +444,7 @@ final class StudyStore: ObservableObject {
         closeOtherRunningSessions(at: date)
         let id = UUID()
         let interval = StudyInterval(start: date, end: nil)
-        data.sessions.append(StudySession(id: id, start: date, end: nil, duration: 0, kind: kind, status: .running, intervals: [interval]))
+        data.sessions.append(StudySession(id: id, start: date, end: nil, duration: 0, kind: kind, status: .running, intervals: [interval], modifiedAt: date))
         return id
     }
     func resumeSession(id: UUID, at date: Date = Date()) {
@@ -366,6 +453,7 @@ final class StudyStore: ObservableObject {
         data.sessions[index].status = .running
         data.sessions[index].end = nil
         data.sessions[index].intervals.append(StudyInterval(start: date, end: nil))
+        data.sessions[index].modifiedAt = date
     }
     func pauseSession(id: UUID, at date: Date = Date()) {
         guard let index = data.sessions.firstIndex(where: { $0.id == id }), data.sessions[index].status == .running else { return }
@@ -373,14 +461,19 @@ final class StudyStore: ObservableObject {
         data.sessions[index].status = .paused
         data.sessions[index].end = date
         data.sessions[index].duration = data.sessions[index].duration(asOf: date)
+        data.sessions[index].modifiedAt = date
     }
-    func completeSession(id: UUID?, at date: Date = Date()) {
+    func completeSession(id: UUID?, at date: Date = Date(), countFocusAsComplete: Bool = true) {
         guard let id, let index = data.sessions.firstIndex(where: { $0.id == id }), data.sessions[index].status != .completed else { return }
         if data.sessions[index].status == .running { closeCurrentInterval(index: index, at: date) }
         data.sessions[index].status = .completed
         data.sessions[index].end = date
         data.sessions[index].duration = data.sessions[index].duration(asOf: date)
-        if data.sessions[index].kind == .focus { data.completedFocusSessions += 1 }
+        data.sessions[index].modifiedAt = date
+        if data.sessions[index].kind == .focus {
+            if countFocusAsComplete { data.completedFocusSessionIDs.insert(id) }
+            data.completedFocusSessions = data.completedFocusSessionIDs.count
+        }
     }
     private func closeCurrentInterval(index: Int, at date: Date) {
         guard let interval = data.sessions[index].intervals.lastIndex(where: { $0.end == nil }) else { return }
@@ -392,6 +485,7 @@ final class StudyStore: ObservableObject {
             data.sessions[index].status = .completed
             data.sessions[index].end = date
             data.sessions[index].duration = data.sessions[index].duration(asOf: date)
+            data.sessions[index].modifiedAt = date
         }
     }
 }
@@ -405,21 +499,42 @@ struct WeeklyStatistics: Equatable {
     var change: Double { previousWeekSeconds == 0 ? (totalSeconds > 0 ? 1 : 0) : (totalSeconds - previousWeekSeconds) / previousWeekSeconds }
 }
 
-func studySeconds(in interval: StudyInterval, during day: Date, calendar: Calendar = .current, asOf: Date = Date()) -> TimeInterval {
+func measuredStudySeconds(in interval: StudyInterval, during day: Date, calendar: Calendar = .current, asOf: Date = Date()) -> TimeInterval {
     guard let dayRange = calendar.dateInterval(of: .day, for: day) else { return 0 }
     let start = max(interval.start, dayRange.start)
     let end = min(interval.end ?? asOf, dayRange.end, asOf)
     return max(0, end.timeIntervalSince(start))
 }
 
-func studySeconds(in session: StudySession, during day: Date, calendar: Calendar = .current, asOf: Date = Date()) -> TimeInterval {
-    guard session.kind.isStudy else { return 0 }
-    if session.intervals.isEmpty {
-        let end = session.end ?? asOf
-        guard let dayRange = calendar.dateInterval(of: .day, for: day) else { return 0 }
-        return max(0, min(end, dayRange.end, asOf).timeIntervalSince(max(session.start, dayRange.start)))
+func measuredStudySeconds(in session: StudySession, during day: Date, calendar: Calendar = .current, asOf: Date = Date()) -> TimeInterval {
+    unionStudySeconds(sessions: [session], during: day, calendar: calendar, asOf: asOf)
+}
+
+func unionStudySeconds(sessions: [StudySession], during day: Date, calendar: Calendar = .current, asOf: Date = Date()) -> TimeInterval {
+    guard let dayRange = calendar.dateInterval(of: .day, for: day) else { return 0 }
+    let intervals = sessions.filter { $0.kind.isStudy }.flatMap { session -> [DateInterval] in
+        let source: [StudyInterval]
+        if session.intervals.isEmpty { source = [StudyInterval(start: session.start, end: session.end)] }
+        else { source = session.intervals }
+        return source.compactMap { interval in
+            let start = max(dayRange.start, interval.start)
+            let end = min(dayRange.end, interval.end ?? asOf, asOf)
+            return end > start ? DateInterval(start: start, end: end) : nil
+        }
+    }.sorted { $0.start < $1.start }
+    var total: TimeInterval = 0
+    var unionEnd: Date?
+    for interval in intervals {
+        if let currentEnd = unionEnd, interval.start <= currentEnd {
+            let extended = max(currentEnd, interval.end)
+            total += extended.timeIntervalSince(currentEnd)
+            unionEnd = extended
+        } else {
+            total += interval.duration
+            unionEnd = interval.end
+        }
     }
-    return session.intervals.reduce(0) { $0 + studySeconds(in: $1, during: day, calendar: calendar, asOf: asOf) }
+    return total
 }
 
 func weekStart(for date: Date, calendar input: Calendar = .current) -> Date {
@@ -435,20 +550,23 @@ func weeklyStatistics(sessions: [StudySession], goal: (Date) -> Int, now: Date =
     calendar.minimumDaysInFirstWeek = 4
     let today = calendar.startOfDay(for: now)
     let start = weekStart(for: today, calendar: calendar)
-    let elapsed = max(1, min(7, (calendar.dateComponents([.day], from: start, to: today).day ?? 0) + 1))
-    func total(from first: Date, days: Int, asOf: Date) -> TimeInterval {
-        (0..<days).reduce(0) { sum, offset in
-            guard let date = calendar.date(byAdding: .day, value: offset, to: first) else { return sum }
-            return sum + sessions.reduce(0) { $0 + studySeconds(in: $1, during: date, calendar: calendar, asOf: asOf) }
+    let elapsed = max(1, (calendar.dateComponents([.day], from: start, to: today).day ?? 0) + 1)
+
+    func dailySeconds(from first: Date, count: Int, asOf: Date) -> [TimeInterval] {
+        (0..<count).compactMap { offset in
+            guard let date = calendar.date(byAdding: .day, value: offset, to: first) else { return nil }
+            return unionStudySeconds(sessions: sessions, during: date, calendar: calendar, asOf: asOf)
         }
     }
-    let current = total(from: start, days: elapsed, asOf: now)
+
+    let currentDays = dailySeconds(from: start, count: elapsed, asOf: now)
+    let current = currentDays.reduce(0) { $0 + floor($1 / 60) * 60 }
     let previous = calendar.date(byAdding: .day, value: -7, to: start) ?? start
-    let prior = total(from: previous, days: 7, asOf: start)
-    let reached = (0..<elapsed).reduce(0) { count, offset in
-        guard let date = calendar.date(byAdding: .day, value: offset, to: start) else { return count }
-        let seconds = sessions.reduce(0) { $0 + studySeconds(in: $1, during: date, calendar: calendar, asOf: now) }
-        return count + (goal(date) > 0 && seconds >= Double(goal(date)) * 60 ? 1 : 0)
+    let prior = dailySeconds(from: previous, count: 7, asOf: start).reduce(0) { $0 + floor($1 / 60) * 60 }
+    let reached = currentDays.enumerated().reduce(0) { count, element in
+        guard let date = calendar.date(byAdding: .day, value: element.offset, to: start) else { return count }
+        let displayMinutes = floor(element.element / 60)
+        return count + (goal(date) > 0 && displayMinutes >= Double(goal(date)) ? 1 : 0)
     }
     return WeeklyStatistics(totalSeconds: current, averageSeconds: current / Double(elapsed), goalsReached: reached, elapsedDays: elapsed, previousWeekSeconds: prior)
 }
@@ -484,17 +602,51 @@ final class TimerEngine: ObservableObject {
         sessionBaseDuration = max(1, store.data.timerBaseDuration)
         isRunning = store.data.timerRunning && store.data.timerStartedAt != nil
         anchorDate = isRunning ? store.data.timerStartedAt : nil
+
         sessionID = store.data.timerSessionID
-        if mode == .until, targetDate <= Date(), isRunning { store.data.timerDeadline = targetDate }
+        if mode == .stopwatch, let stopwatchStart = store.data.stopwatchStartedAt, sessionID != nil {
+            let recovered = max(0, Date().timeIntervalSince(stopwatchStart))
+            elapsed = max(elapsed, recovered)
+            store.data.stopwatchStartedAt = nil
+            store.data.timerRunning = false
+            store.data.timerStartedAt = nil
+            store.data.timerDeadline = nil
+            if let sessionID { store.pauseSession(id: sessionID, at: Date()) }
+            isRunning = false
+            anchorDate = nil
+            store.data.elapsed = elapsed
+        } else if isRunning && mode == .stopwatch {
+            isRunning = false
+            anchorDate = nil
+            store.data.timerRunning = false
+            store.data.timerStartedAt = nil
+            store.data.timerDeadline = nil
+            if let sessionID { store.pauseSession(id: sessionID, at: Date()) }
+        }
+        if sessionID != nil && !store.data.sessions.contains(where: { $0.id == sessionID && ($0.isRunning || $0.isPaused) }) {
+            sessionID = nil
+            isRunning = false
+            anchorDate = nil
+            store.data.timerRunning = false
+            store.data.timerStartedAt = nil
+            store.data.timerDeadline = nil
+            store.data.stopwatchStartedAt = nil
+            store.data.timerSessionID = nil
+        }
         if isRunning && mode != .stopwatch && store.data.timerDeadline == nil {
             store.data.timerDeadline = Date().addingTimeInterval(remaining)
         }
+        if mode == .until && targetDate <= Date() && isRunning { store.data.timerDeadline = Date() }
         if !isRunning { anchorDate = nil }
         Timer.publish(every: 1, on: .main, in: .common).autoconnect().sink { [weak self] _ in self?.tick() }.store(in: &cancellables)
         tick()
     }
 
     var displayedRemaining: TimeInterval {
+        if mode == .stopwatch, !isRunning, let stopwatchStart = store.data.stopwatchStartedAt, sessionID != nil {
+            let elapsedNow = elapsed + max(0, Date().timeIntervalSince(stopwatchStart))
+            return max(0, sessionBaseDuration - elapsedNow)
+        }
         guard isRunning else { return remaining }
         if mode == .until { return max(0, targetDate.timeIntervalSince(Date())) }
         if mode == .stopwatch { return 0 }
@@ -502,8 +654,14 @@ final class TimerEngine: ObservableObject {
         return max(0, remaining - (anchorDate.map { Date().timeIntervalSince($0) } ?? 0))
     }
     var displayedElapsed: TimeInterval {
+        if mode == .stopwatch, !isRunning, let stopwatchStart = store.data.stopwatchStartedAt, sessionID != nil {
+            return elapsed + max(0, Date().timeIntervalSince(stopwatchStart))
+        }
         guard isRunning else { return elapsed }
-        if mode == .stopwatch { return elapsed + max(0, Date().timeIntervalSince(anchorDate ?? Date())) }
+        if mode == .stopwatch {
+            let start = anchorDate ?? Date()
+            return elapsed + max(0, Date().timeIntervalSince(start))
+        }
         if mode == .until { return max(0, Date().timeIntervalSince(anchorDate ?? Date())) }
         return sessionBaseDuration - displayedRemaining
     }
@@ -528,6 +686,7 @@ final class TimerEngine: ObservableObject {
         isComplete = false
         remaining = newMode == .pomodoro ? Double(store.data.settings.focusMinutes * 60) : (newMode == .countdown ? 25 * 60 : 0)
         if newMode == .until { targetDate = nextTarget(hour: Calendar.current.component(.hour, from: Date()), minute: Calendar.current.component(.minute, from: Date()), after: Date()) }
+        if newMode == .stopwatch { elapsed = 0 }
         sessionBaseDuration = newMode == .until ? max(1, targetDate.timeIntervalSinceNow) : remaining
         sessionID = nil
         persist(stoppedAt: Date())
@@ -608,6 +767,7 @@ final class TimerEngine: ObservableObject {
         store.data.timerStartedAt = date
         store.data.timerSessionID = sessionID
         store.data.timerDeadline = deadline(from: date)
+        store.data.stopwatchStartedAt = mode == .stopwatch ? date : nil
         now = date
         persist(stoppedAt: date)
         scheduleNotificationIfNeeded()
@@ -624,16 +784,19 @@ final class TimerEngine: ObservableObject {
     func pause(save: Bool = true) {
         guard isRunning else { return }
         let date = Date()
+        if mode != .stopwatch && displayedRemaining <= 0 { completeTimer(at: deadlineReached(at: date) ?? date); return }
         let left = displayedRemaining
         if mode == .stopwatch { elapsed = displayedElapsed }
         else if mode == .until { remaining = left; elapsed = max(0, sessionBaseDuration - left) }
         else { remaining = left; elapsed = sessionBaseDuration - left }
-        if save, let sessionID { store.pauseSession(id: sessionID, at: date) }
+        if let sessionID { store.pauseSession(id: sessionID, at: date) }
         isRunning = false
         anchorDate = nil
         store.data.timerRunning = false
         store.data.timerStartedAt = nil
         store.data.timerDeadline = nil
+        store.data.stopwatchStartedAt = nil
+        store.data.timerSessionID = sessionID
         persist(stoppedAt: date)
         TimerNotifications.cancelTimer()
     }
@@ -642,20 +805,66 @@ final class TimerEngine: ObservableObject {
 
     func reset() {
         if isRunning { pause() }
-        else { stopCurrentSession(at: Date()) }
+        stopCurrentSession(at: Date())
+        sessionID = nil
         elapsed = 0
         isComplete = false
         remaining = mode == .pomodoro ? Double((selectedKind == .focus ? store.data.settings.focusMinutes : selectedKind == .shortBreak ? store.data.settings.shortBreakMinutes : store.data.settings.longBreakMinutes) * 60) : (mode == .countdown ? sessionBaseDuration : 0)
-        if mode == .until { remaining = max(0, targetDate.timeIntervalSinceNow) }
+        if mode == .until {
+            if targetDate <= Date() { targetDate = nextTarget(hour: Calendar.current.component(.hour, from: targetDate), minute: Calendar.current.component(.minute, from: targetDate), after: Date()) }
+            remaining = max(0, targetDate.timeIntervalSinceNow)
+        }
         sessionBaseDuration = mode == .until ? max(1, remaining) : remaining
         sessionID = nil
+        isComplete = false
         persist(stoppedAt: Date())
     }
 
     func quickStart(minutes: Int) { configureCountdown(minutes: minutes); start() }
 
+    func handleAppDeactivation() {
+        guard isRunning else { return }
+        persist(stoppedAt: Date())
+    }
+
+    func refreshFromClock(at current: Date = Date()) {
+        synchronizeTimerStateFromStore(at: current)
+        if mode != .stopwatch, store.data.timerRunning, let deadline = store.data.timerDeadline, deadline <= current {
+            isRunning = true
+            anchorDate = store.data.timerStartedAt ?? current
+            completeTimer(at: deadline)
+            return
+        }
+        if isRunning && mode != .stopwatch {
+            anchorDate = store.data.timerStartedAt ?? anchorDate ?? current
+            scheduleNotificationIfNeeded()
+        }
+        tick(at: current)
+    }
+
+    private func synchronizeTimerStateFromStore(at current: Date) {
+        let synced = store.data
+        let changed = mode != synced.activeMode || selectedKind != synced.selectedKind || sessionID != synced.timerSessionID || isRunning != synced.timerRunning || anchorDate != synced.timerStartedAt || targetDate != synced.targetDate || remaining != synced.remaining || elapsed != synced.elapsed
+        guard changed else { return }
+        let sessionExists = synced.timerSessionID.map { id in
+            synced.sessions.contains { $0.id == id && ($0.isRunning || $0.isPaused) }
+        } ?? (synced.timerSessionID == nil)
+        guard sessionExists else { return }
+        mode = synced.activeMode
+        selectedKind = synced.selectedKind
+        remaining = synced.remaining
+        elapsed = synced.elapsed
+        targetDate = synced.targetDate
+        sessionBaseDuration = max(1, synced.timerBaseDuration)
+        sessionID = synced.timerSessionID
+        isRunning = synced.timerRunning && synced.timerStartedAt != nil
+        anchorDate = isRunning ? synced.timerStartedAt : nil
+        completionHandled = false
+        now = current
+    }
+
     func resetUserData() {
-        if isRunning { pause() }
+        stopCurrentSession(at: Date())
         TimerNotifications.cancelTimer()
         store.resetUserData()
         mode = .pomodoro
@@ -671,13 +880,20 @@ final class TimerEngine: ObservableObject {
     }
 
     private func stopCurrentSession(at date: Date) {
-        if isRunning, let sessionID { store.completeSession(id: sessionID, at: deadlineReached(at: date) ?? date) }
-        else if let sessionID, store.data.sessions.first(where: { $0.id == sessionID })?.isPaused == true { store.completeSession(id: sessionID, at: date) }
+        if isRunning, let sessionID {
+            let end = deadlineReached(at: date) ?? date
+            store.completeSession(id: sessionID, at: end, countFocusAsComplete: false)
+        } else if let sessionID, store.data.sessions.first(where: { $0.id == sessionID })?.isPaused == true {
+            store.completeSession(id: sessionID, at: date, countFocusAsComplete: false)
+        }
         isRunning = false
         anchorDate = nil
         store.data.timerRunning = false
         store.data.timerStartedAt = nil
         store.data.timerDeadline = nil
+        store.data.stopwatchStartedAt = nil
+        store.data.timerSessionID = nil
+        sessionID = nil
         TimerNotifications.cancelTimer()
     }
 
@@ -687,16 +903,28 @@ final class TimerEngine: ObservableObject {
         return deadline.flatMap { $0 <= date ? $0 : nil }
     }
 
-    private func tick() {
-        now = Date()
+    private func tick(at date: Date = Date()) {
+        now = date
+        if !isRunning, mode != .stopwatch, store.data.timerRunning {
+            guard let deadline = store.data.timerDeadline else {
+                store.data.timerRunning = false
+                store.data.timerStartedAt = nil
+                store.data.timerSessionID = nil
+                sessionID = nil
+                return
+            }
+            guard deadline <= date else { return }
+            isRunning = true
+            anchorDate = store.data.timerStartedAt ?? now
+        }
         guard isRunning else { return }
-        if mode != .stopwatch && displayedRemaining <= 0 {
-            completeTimer(at: deadlineReached(at: now) ?? now)
+        if let deadline = deadlineReached(at: date) {
+            completeTimer(at: deadline)
             return
         }
-        if now.timeIntervalSince(lastSessionSave) >= 5 {
-            persist(stoppedAt: now)
-            lastSessionSave = now
+        if date.timeIntervalSince(lastSessionSave) >= 5 {
+            persist(stoppedAt: date)
+            lastSessionSave = date
         }
         checkGoalReached()
     }
@@ -706,7 +934,11 @@ final class TimerEngine: ObservableObject {
         completionHandled = true
         let completedMode = mode
         let completedKind = selectedKind
+        TimerNotifications.cancelTimer()
+        if store.data.settings.completionSound { TimerNotifications.playCompletionSound() }
+        if store.data.settings.breakReminders { TimerNotifications.postCompletion(kind: completedKind, mode: completedMode) }
         if let sessionID { store.completeSession(id: sessionID, at: date) }
+        sessionID = nil
         isRunning = false
         anchorDate = nil
         store.data.timerRunning = false
@@ -715,7 +947,6 @@ final class TimerEngine: ObservableObject {
         elapsed = sessionBaseDuration
         remaining = 0
         isComplete = true
-        if store.data.settings.completionSound { TimerNotifications.playCompletionSound() }
         if completedKind == .focus { checkGoalReached() }
         if completedMode == .pomodoro {
             if completedKind == .focus {
@@ -728,7 +959,6 @@ final class TimerEngine: ObservableObject {
             sessionID = nil
             persist(stoppedAt: date)
         }
-        if store.data.settings.breakReminders { TimerNotifications.postCompletion(kind: completedKind, mode: completedMode) }
     }
 
     private func checkGoalReached() {
@@ -748,16 +978,18 @@ final class TimerEngine: ObservableObject {
 
     private func persist(stoppedAt date: Date) {
         var snapshot = store.data
-        snapshot.schemaVersion = 2
+        snapshot.schemaVersion = 3
         snapshot.activeMode = mode
         snapshot.remaining = isRunning ? displayedRemaining : remaining
         snapshot.elapsed = isRunning ? displayedElapsed : elapsed
         snapshot.selectedKind = selectedKind
         snapshot.targetDate = targetDate
         snapshot.timerBaseDuration = max(1, sessionBaseDuration)
-        snapshot.timerRunning = isRunning
-        snapshot.timerStartedAt = isRunning ? anchorDate : nil
-        snapshot.timerDeadline = isRunning ? deadline(from: anchorDate ?? date) : nil
+        let shouldContinueWhileInactive = mode != .stopwatch && store.data.timerRunning && !isComplete
+        snapshot.timerRunning = isRunning || shouldContinueWhileInactive
+        snapshot.timerStartedAt = isRunning ? anchorDate : (shouldContinueWhileInactive ? store.data.timerStartedAt : nil)
+        snapshot.timerDeadline = isRunning ? deadline(from: anchorDate ?? date) : (shouldContinueWhileInactive ? store.data.timerDeadline : nil)
+        snapshot.stopwatchStartedAt = mode == .stopwatch && sessionID != nil && !isComplete ? (isRunning ? anchorDate : store.data.stopwatchStartedAt) : nil
         snapshot.timerSessionID = sessionID
         store.data = snapshot
     }

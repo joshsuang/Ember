@@ -4,6 +4,7 @@ struct SettingsView: View {
     @ObservedObject var store: StudyStore
     @ObservedObject var engine: TimerEngine
     @State private var confirmReset = false
+    @State private var showNotificationExplanation = false
     private let weekdays = [(2, "Monday"), (3, "Tuesday"), (4, "Wednesday"), (5, "Thursday"), (6, "Friday"), (7, "Saturday"), (1, "Sunday")]
     var body: some View {
         ScrollView {
@@ -40,9 +41,7 @@ struct SettingsView: View {
                     VStack(spacing: 13) {
                         HStack(spacing: 8) {
                             ForEach(AppearanceChoice.allCases) { choice in
-                                Button {
-                                    store.data.settings.appearance = choice
-                                } label: {
+                                Button { store.data.settings.appearance = choice } label: {
                                     HStack(spacing: 6) { Image(systemName: choice == .dark ? "moon.fill" : choice == .light ? "sun.max.fill" : "circle.lefthalf.filled"); Text(choice.rawValue) }
                                         .font(.system(size: 10, weight: store.data.settings.appearance == choice ? .semibold : .medium))
                                         .foregroundStyle(store.data.settings.appearance == choice ? Color.accentColor : Color.emberSecondary)
@@ -58,9 +57,8 @@ struct SettingsView: View {
                             Spacer()
                             ForEach(AccentChoice.allCases) { accent in
                                 Button { store.data.settings.accent = accent } label: {
-                                    Circle().fill(accent.color).frame(width: 17, height: 17)
-                                        .padding(3).overlay(Circle().stroke(store.data.settings.accent == accent ? accent.color : Color.clear, lineWidth: 1))
-                                        .padding(.horizontal, 2)
+                                    Circle().fill(accent.color).frame(width: 17, height: 17).padding(3)
+                                        .overlay(Circle().stroke(store.data.settings.accent == accent ? accent.color : Color.clear, lineWidth: 1)).padding(.horizontal, 2)
                                 }.buttonStyle(.plain).help(accent.rawValue)
                             }
                         }
@@ -70,9 +68,9 @@ struct SettingsView: View {
                     VStack(spacing: 0) {
                         SettingsToggleRow(title: "Timer completion sound", subtitle: "A soft cue when a timer finishes", isOn: boolBinding(\.completionSound))
                         Divider().overlay(Color.emberStroke)
-                        SettingsToggleRow(title: "Break reminders", subtitle: "A nudge to rest between focus blocks", isOn: boolBinding(\.breakReminders))
+                        SettingsToggleRow(title: "Break reminders", subtitle: "A nudge to rest between focus blocks", isOn: notificationBinding(\.breakReminders))
                         Divider().overlay(Color.emberStroke)
-                        SettingsToggleRow(title: "Study goal notifications", subtitle: "A little celebration when you reach your goal", isOn: boolBinding(\.goalNotifications))
+                        SettingsToggleRow(title: "Study goal notifications", subtitle: "A little celebration when you reach your goal", isOn: notificationBinding(\.goalNotifications))
                     }
                 }
                 settingsSection("GENERAL", description: "Small details for your daily flow.") {
@@ -93,34 +91,69 @@ struct SettingsView: View {
                                     } label: {
                                         Text(value == 0 ? "+ Add" : "\(value)m").font(.system(size: 9, weight: .semibold)).foregroundStyle(value == 0 ? Color.accentColor : Color.emberSecondary)
                                             .padding(.horizontal, 8).padding(.vertical, 6).background(Color.emberSoftFill, in: RoundedRectangle(cornerRadius: 6))
-                                    }.menuStyle(.borderlessButton)
+                                    }
+                                    #if os(macOS)
+                                    .menuStyle(.borderlessButton)
+                                    #endif
                                 }
                             }
                         }.padding(.vertical, 10)
                         Divider().overlay(Color.emberStroke)
-                        SettingsToggleRow(title: "Keep timer in a compact floating window", subtitle: "macOS menu-bar overlay support is not enabled in this prototype", isOn: boolBinding(\.compactTimer), disabled: true)
+                        SettingsToggleRow(title: "Keep timer in a compact floating window", subtitle: "Floating timer windows are not available yet", isOn: boolBinding(\.compactTimer), disabled: true)
                         Divider().overlay(Color.emberStroke)
                         HStack {
                             VStack(alignment: .leading, spacing: 3) {
-                                Text("Reset prototype data").font(.system(size: 11, weight: .medium)).foregroundStyle(Color.emberText)
-                                Text("Restore the original sample sessions and settings.").font(.system(size: 9)).foregroundStyle(Color.emberMuted)
+                                Text("iCloud sync")
+                                    .font(.system(size: 11, weight: .medium)).foregroundStyle(Color.emberText)
+                                Text(store.cloudSyncStatus.title)
+                                    .font(.system(size: 9)).foregroundStyle(Color.emberMuted)
                             }
                             Spacer()
-                            Button("Reset") { confirmReset = true }
+                            Button("Sync now") { store.syncNow() }
+                                .buttonStyle(EmberButtonStyle(compact: true))
+                        }.padding(.vertical, 10)
+                        Divider().overlay(Color.emberStroke)
+                        HStack {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text("Clear study data").font(.system(size: 11, weight: .medium)).foregroundStyle(Color.emberText)
+                                Text("Remove saved sessions and restore default preferences.").font(.system(size: 9)).foregroundStyle(Color.emberMuted)
+                            }
+                            Spacer()
+                            Button("Clear data") { confirmReset = true }
                                 .buttonStyle(EmberButtonStyle(compact: true))
                                 .foregroundStyle(Color.red.opacity(0.85))
-                                .confirmationDialog("Reset the prototype?", isPresented: $confirmReset, titleVisibility: .visible) {
-                                    Button("Reset sample data", role: .destructive) { engine.resetToPrototype() }
+                                .confirmationDialog("Clear your Ember data?", isPresented: $confirmReset, titleVisibility: .visible) {
+                                    Button("Clear all study data", role: .destructive) { engine.resetUserData() }
                                     Button("Cancel", role: .cancel) {}
-                                } message: { Text("Your settings and local study history will return to their sample values.") }
+                                } message: { Text("This permanently removes your locally saved sessions and preferences. This cannot be undone.") }
                         }.padding(.vertical, 10)
                     }
                 }
-                Text("Your study data stays on this Mac. Ember is a local prototype — no accounts, sync or cloud storage.")
-                    .font(.system(size: 9)).foregroundStyle(Color.emberMuted).fixedSize(horizontal: false, vertical: true)
-                    .padding(.horizontal, 2).padding(.top, 2)
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(store.cloudSyncMessage ?? cloudSyncDescription)
+                        .font(.system(size: 9)).foregroundStyle(Color.emberMuted).fixedSize(horizontal: false, vertical: true)
+                    if let error = store.persistenceError {
+                        Label("Local save problem: \(error)", systemImage: "exclamationmark.triangle.fill")
+                            .font(.system(size: 9)).foregroundStyle(Color.orange).fixedSize(horizontal: false, vertical: true)
+                    }
+                }.padding(.horizontal, 2).padding(.top, 2)
             }
             .padding(.horizontal, 25).padding(.vertical, 23).frame(maxWidth: 710, alignment: .leading).frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .alert("Allow Ember notifications?", isPresented: $showNotificationExplanation) {
+            Button("Enable notifications") { TimerNotifications.requestPermission() }
+            Button("Not now", role: .cancel) { }
+        } message: {
+            Text("Ember can show a local reminder when a timer or daily study goal finishes. Notifications are optional; timers work without them.")
+        }
+    }
+
+    private var cloudSyncDescription: String {
+        switch store.cloudSyncStatus {
+        case .waiting: "Study data is saved on this device. Turn on iCloud to sync with your other devices."
+        case .syncing: "Study data is saved locally and syncing through your private iCloud account."
+        case .synced: "Study data is saved locally and synced through your private iCloud account."
+        case .unavailable: "Study data is saved locally. iCloud sync is currently unavailable."
         }
     }
 
@@ -133,15 +166,20 @@ struct SettingsView: View {
             EmberCard(padding: 13) { content() }
         }
     }
-
     private func goalBinding(weekday: Int) -> Binding<Int> {
-        Binding(get: { store.data.settings.weekdayGoals[weekday] ?? 60 }, set: { store.data.settings.weekdayGoals[weekday] = max(0, $0) })
+        Binding(get: { store.data.settings.weekdayGoals[weekday] ?? 60 }, set: { store.data.settings.weekdayGoals[weekday] = min(1440, max(0, $0)) })
     }
     private func intBinding(_ keyPath: WritableKeyPath<StudySettings, Int>) -> Binding<Int> {
         Binding(get: { store.data.settings[keyPath: keyPath] }, set: { store.data.settings[keyPath: keyPath] = $0 })
     }
     private func boolBinding(_ keyPath: WritableKeyPath<StudySettings, Bool>) -> Binding<Bool> {
         Binding(get: { store.data.settings[keyPath: keyPath] }, set: { store.data.settings[keyPath: keyPath] = $0 })
+    }
+    private func notificationBinding(_ keyPath: WritableKeyPath<StudySettings, Bool>) -> Binding<Bool> {
+        Binding(get: { store.data.settings[keyPath: keyPath] }, set: { enabled in
+            store.data.settings[keyPath: keyPath] = enabled
+            if enabled { showNotificationExplanation = true }
+        })
     }
     private func setQuick(index: Int, minutes: Int) {
         var values = store.data.settings.quickDurations
@@ -155,8 +193,8 @@ struct SettingsView: View {
 
 struct GoalEditor: View {
     @Binding var minutes: Int
-    @State private var hours: Int = 0
-    @State private var remainder: Int = 0
+    @State private var hours = 0
+    @State private var remainder = 0
     var body: some View {
         HStack(spacing: 4) {
             TextField("0", value: $hours, format: .number).frame(width: 31).textFieldStyle(.plain).multilineTextAlignment(.trailing).onChange(of: hours) { _, _ in update() }
@@ -164,14 +202,11 @@ struct GoalEditor: View {
             TextField("0", value: $remainder, format: .number).frame(width: 31).textFieldStyle(.plain).multilineTextAlignment(.trailing).onChange(of: remainder) { _, _ in update() }
             Text("m").font(.system(size: 9)).foregroundStyle(Color.emberMuted)
         }
-        .font(.system(size: 10, weight: .medium, design: .rounded).monospacedDigit())
-        .foregroundStyle(Color.emberText)
-        .padding(.horizontal, 8).padding(.vertical, 6)
-        .background(Color.emberSoftFill, in: RoundedRectangle(cornerRadius: 7))
-        .onAppear { sync() }
-        .onChange(of: minutes) { _, _ in sync() }
+        .font(.system(size: 10, weight: .medium, design: .rounded).monospacedDigit()).foregroundStyle(Color.emberText)
+        .padding(.horizontal, 8).padding(.vertical, 6).background(Color.emberSoftFill, in: RoundedRectangle(cornerRadius: 7))
+        .onAppear { sync() }.onChange(of: minutes) { _, _ in sync() }
     }
-    private func update() { minutes = max(0, hours) * 60 + min(59, max(0, remainder)) }
+    private func update() { minutes = min(1440, max(0, hours) * 60 + min(59, max(0, remainder))) }
     private func sync() { hours = minutes / 60; remainder = minutes % 60 }
 }
 

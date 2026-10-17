@@ -22,7 +22,10 @@ struct TimerCard: View {
                     } label: {
                         HStack(spacing: 5) { Image(systemName: engine.mode.symbol); Text(engine.mode.rawValue); Image(systemName: "chevron.down").font(.system(size: 8, weight: .bold)) }
                             .font(.system(size: 10, weight: .medium)).foregroundStyle(Color.emberSecondary).padding(.horizontal, 9).padding(.vertical, 6).background(Color.emberSoftFill, in: Capsule())
-                    }.menuStyle(.borderlessButton)
+                    }
+                    #if os(macOS)
+                    .menuStyle(.borderlessButton)
+                    #endif
                 }
                 HStack(alignment: .center, spacing: 18) {
                     TimerDial(progress: engine.progress, running: engine.isRunning, size: compact ? 88 : 105) {
@@ -75,9 +78,18 @@ struct TimerCard: View {
                     HStack(spacing: 8) {
                         Text("UNTIL").font(.system(size: 8, weight: .semibold)).tracking(0.7).foregroundStyle(Color.emberMuted)
                         DatePicker("Target time", selection: Binding(get: { engine.targetDate }, set: { engine.configureTarget($0) }), displayedComponents: .hourAndMinute)
-                            .labelsHidden().datePickerStyle(.field).controlSize(.small).frame(width: 100)
+                            .labelsHidden()
+                            #if os(macOS)
+                            .datePickerStyle(.field).controlSize(.small).frame(width: 100)
+                            #else
+                            .datePickerStyle(.compact)
+                            #endif
                         Spacer()
                     }
+                }
+                if !store.data.settings.breakReminders {
+                    Text("Timer notifications are off in Settings. Timers still finish normally.")
+                        .font(.system(size: 9)).foregroundStyle(Color.emberMuted).fixedSize(horizontal: false, vertical: true)
                 }
             }
         }

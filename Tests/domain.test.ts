@@ -1,0 +1,32 @@
+import assert from 'node:assert/strict';
+import { compactDuration, daysInYear, durationText, encodeSwiftJSON, freshData, mergeData, nextTarget, normalizeData, studyMinutes, studySeconds, weeklyStats, weekDates, type StudySession } from '../src/lib/domain';
+let checks=0;
+function check(value:unknown,message:string){assert.ok(value,message);checks++;}
+const date=(y:number,m:number,d:number,h=0,min=0)=>new Date(y,m-1,d,h,min,0,0).getTime();
+const day=(stamp:number)=>{const d=new Date(stamp);d.setHours(0,0,0,0);return d.getTime();};
+function session(id:string,start:number,end:number|null,kind:StudySession['kind']='Focused study',status:StudySession['status']='completed'):StudySession{return{id,start,end,duration:end===null?0:(end-start)/1000,kind,status,modifiedAt:end??start,intervals:[{id:`i-${id}`,start,end}]};}
+const first=date(2026,4,7,23,50), next=date(2026,4,8,0,20);
+const midnight=session('midnight',first,next),breakSession=session('break',first,next,'Short break');
+assert.equal(studySeconds([midnight],first,next),600);checks++;
+assert.equal(studySeconds([midnight],next,next),1200);checks++;
+assert.equal(studySeconds([breakSession],first,next),0);checks++;
+const overlap=[session('a',date(2026,4,7,9),date(2026,4,7,10)),session('b',date(2026,4,7,9,30),date(2026,4,7,10,30))];
+assert.equal(studySeconds(overlap,date(2026,4,7)),5400);checks++;
+const paused:StudySession={id:'paused',start:first,end:first+300_000,duration:300,kind:'Focused study',status:'paused',modifiedAt:first+300_000,intervals:[{id:'p1',start:first,end:first+300_000},{id:'p2',start:first+900_000,end:first+1_000_000}]};
+assert.equal(paused.intervals.reduce((n,i)=>n+(i.end!-i.start)/1000,0),400);checks++;
+const d=freshData(date(2026,4,8,12));d.sessions=[session('mon',date(2026,4,6,9),date(2026,4,6,10)),session('tue',date(2026,4,7,9),date(2026,4,7,9,30)),session('break',date(2026,4,8,9),date(2026,4,8,12),'Long break')];
+const stats=weeklyStats(d,date(2026,4,8,12));assert.equal(stats.totalSeconds,5400);checks++;assert.equal(stats.averageSeconds,1800);checks++;assert.equal(stats.goalsReached,1);checks++;
+assert.equal(new Date(weekDates(date(2026,4,8))[0]).getDay(),1);checks++;
+const overlapDay=date(2026,4,7);assert.equal(studyMinutes(d.sessions,overlapDay),30);checks++;
+const data=freshData(date(2026,4,8));data.settings.focusMinutes=80;data.settings.weekdayGoals[2]=95;data.sessions=[midnight];
+const swift=JSON.parse(encodeSwiftJSON(data));assert.equal(swift.settings.focusMinutes,80);checks++;assert.equal(swift.sessions[0].start,(first-978307200000)/1000);checks++;
+const normalized=normalizeData(swift,date(2026,4,8));assert.equal(normalized.settings.weekdayGoals[2],95);checks++;assert.equal(normalized.sessions[0].start,first);checks++;
+const merged=mergeData(normalized,normalizeData({...swift,sessions:[...swift.sessions,session('new',date(2026,4,9),date(2026,4,9,0,1))]}));assert.equal(merged.sessions.length,2);checks++;
+const duplicate=mergeData(normalized,normalized);assert.equal(duplicate.sessions.length,1);checks++;
+const reset=freshData(date(2026,4,10));reset.resetAt=date(2026,4,10);const old=mergeData(reset,normalized);assert.equal(old.sessions.length,0);checks++;
+const newer=freshData(date(2026,4,8));assert.throws(()=>normalizeData(null));checks++;assert.throws(()=>normalizeData({sessions:{}}));checks++;assert.throws(()=>normalizeData({...newer,schemaVersion:4}));checks++;
+const bad=normalizeData({settings:{focusMinutes:999,weekdayGoals:{2:9999},quickDurations:[0,25,25,800]}},date(2026,4,8));assert.equal(bad.settings.focusMinutes,180);checks++;assert.equal(bad.settings.weekdayGoals[2],1440);checks++;assert.deepEqual(bad.settings.quickDurations,[25]);checks++;
+const tomorrow=nextTarget(9,0,date(2026,4,7,10));assert.equal(new Date(tomorrow).getDate(),8);checks++;
+assert.equal(compactDuration(90),'1h 30m');checks++;assert.equal(durationText(3661,true),'01:01:01');checks++;
+assert.equal(daysInYear(freshData(date(2024,6,1)),2024).length,366);checks++;
+console.log(`Passed ${checks} Ember web domain checks.`);

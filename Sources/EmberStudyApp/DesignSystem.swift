@@ -1,23 +1,41 @@
 import SwiftUI
+
+#if os(macOS)
 import AppKit
+#elseif os(iOS)
+import UIKit
+#endif
 
 extension Color {
+    #if os(macOS)
     private static func adaptive(dark: NSColor, light: NSColor) -> Color {
         Color(nsColor: NSColor(name: nil) { appearance in
             appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? dark : light
         })
     }
-    static var emberBackground: Color { adaptive(dark: NSColor(srgbRed: 0.075, green: 0.080, blue: 0.087, alpha: 1), light: NSColor(srgbRed: 0.96, green: 0.96, blue: 0.95, alpha: 1)) }
-    static var emberSurface: Color { adaptive(dark: NSColor(srgbRed: 0.105, green: 0.112, blue: 0.122, alpha: 1), light: NSColor(srgbRed: 1, green: 1, blue: 0.995, alpha: 1)) }
-    static var emberRaised: Color { adaptive(dark: NSColor(srgbRed: 0.135, green: 0.143, blue: 0.153, alpha: 1), light: NSColor(srgbRed: 0.91, green: 0.92, blue: 0.93, alpha: 1)) }
-    static var emberStroke: Color { adaptive(dark: NSColor.white.withAlphaComponent(0.075), light: NSColor.black.withAlphaComponent(0.09)) }
-    static var emberMutedFill: Color { adaptive(dark: NSColor.white.withAlphaComponent(0.065), light: NSColor.black.withAlphaComponent(0.07)) }
-    static var emberSoftFill: Color { adaptive(dark: NSColor.white.withAlphaComponent(0.05), light: NSColor.black.withAlphaComponent(0.045)) }
-    static var emberRail: Color { adaptive(dark: NSColor(srgbRed: 0.09, green: 0.095, blue: 0.105, alpha: 1), light: NSColor(srgbRed: 0.985, green: 0.985, blue: 0.98, alpha: 1)) }
-    static var emberTooltip: Color { adaptive(dark: NSColor(srgbRed: 0.16, green: 0.165, blue: 0.18, alpha: 1), light: NSColor(srgbRed: 0.18, green: 0.19, blue: 0.21, alpha: 1)) }
-    static var emberMuted: Color { adaptive(dark: NSColor(srgbRed: 0.52, green: 0.55, blue: 0.59, alpha: 1), light: NSColor(srgbRed: 0.40, green: 0.43, blue: 0.47, alpha: 1)) }
-    static var emberText: Color { adaptive(dark: NSColor(srgbRed: 0.93, green: 0.93, blue: 0.92, alpha: 1), light: NSColor(srgbRed: 0.14, green: 0.15, blue: 0.17, alpha: 1)) }
-    static var emberSecondary: Color { adaptive(dark: NSColor(srgbRed: 0.69, green: 0.71, blue: 0.73, alpha: 1), light: NSColor(srgbRed: 0.34, green: 0.37, blue: 0.40, alpha: 1)) }
+    private static func rgb(_ red: CGFloat, _ green: CGFloat, _ blue: CGFloat, _ alpha: CGFloat = 1) -> NSColor {
+        NSColor(srgbRed: red, green: green, blue: blue, alpha: alpha)
+    }
+    #elseif os(iOS)
+    private static func adaptive(dark: UIColor, light: UIColor) -> Color {
+        Color(uiColor: UIColor { traits in traits.userInterfaceStyle == .dark ? dark : light })
+    }
+    private static func rgb(_ red: CGFloat, _ green: CGFloat, _ blue: CGFloat, _ alpha: CGFloat = 1) -> UIColor {
+        UIColor(red: red, green: green, blue: blue, alpha: alpha)
+    }
+    #endif
+
+    static var emberBackground: Color { adaptive(dark: rgb(0.075, 0.080, 0.087), light: rgb(0.96, 0.96, 0.95)) }
+    static var emberSurface: Color { adaptive(dark: rgb(0.105, 0.112, 0.122), light: rgb(1, 1, 0.995)) }
+    static var emberRaised: Color { adaptive(dark: rgb(0.135, 0.143, 0.153), light: rgb(0.91, 0.92, 0.93)) }
+    static var emberStroke: Color { adaptive(dark: rgb(1, 1, 1, 0.075), light: rgb(0, 0, 0, 0.09)) }
+    static var emberMutedFill: Color { adaptive(dark: rgb(1, 1, 1, 0.065), light: rgb(0, 0, 0, 0.07)) }
+    static var emberSoftFill: Color { adaptive(dark: rgb(1, 1, 1, 0.05), light: rgb(0, 0, 0, 0.045)) }
+    static var emberRail: Color { adaptive(dark: rgb(0.09, 0.095, 0.105), light: rgb(0.985, 0.985, 0.98)) }
+    static var emberTooltip: Color { adaptive(dark: rgb(0.16, 0.165, 0.18), light: rgb(0.18, 0.19, 0.21)) }
+    static var emberMuted: Color { adaptive(dark: rgb(0.52, 0.55, 0.59), light: rgb(0.40, 0.43, 0.47)) }
+    static var emberText: Color { adaptive(dark: rgb(0.93, 0.93, 0.92), light: rgb(0.14, 0.15, 0.17)) }
+    static var emberSecondary: Color { adaptive(dark: rgb(0.69, 0.71, 0.73), light: rgb(0.34, 0.37, 0.40)) }
 }
 
 struct EmberCard<Content: View>: View {

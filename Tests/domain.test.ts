@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { compactDuration, daysInYear, durationText, encodeSwiftJSON, freshData, mergeData, nextTarget, normalizeData, studyMinutes, studySeconds, weeklyStats, weekDates, type StudySession } from '../src/lib/domain';
+import { compactDuration, daysInYear, durationText, encodeBackupJSON, freshData, mergeData, nextTarget, normalizeData, studyMinutes, studySeconds, weeklyStats, weekDates, type StudySession } from '../src/lib/domain';
 let checks=0;
 function check(value:unknown,message:string){assert.ok(value,message);checks++;}
 const date=(y:number,m:number,d:number,h=0,min=0)=>new Date(y,m-1,d,h,min,0,0).getTime();
@@ -19,9 +19,9 @@ const stats=weeklyStats(d,date(2026,4,8,12));assert.equal(stats.totalSeconds,540
 assert.equal(new Date(weekDates(date(2026,4,8))[0]).getDay(),1);checks++;
 const overlapDay=date(2026,4,7);assert.equal(studyMinutes(d.sessions,overlapDay),30);checks++;
 const data=freshData(date(2026,4,8));data.settings.focusMinutes=80;data.settings.weekdayGoals[2]=95;data.sessions=[midnight];
-const swift=JSON.parse(encodeSwiftJSON(data));assert.equal(swift.settings.focusMinutes,80);checks++;assert.equal(swift.sessions[0].start,(first-978307200000)/1000);checks++;
-const normalized=normalizeData(swift,date(2026,4,8));assert.equal(normalized.settings.weekdayGoals[2],95);checks++;assert.equal(normalized.sessions[0].start,first);checks++;
-const merged=mergeData(normalized,normalizeData({...swift,sessions:[...swift.sessions,session('new',date(2026,4,9),date(2026,4,9,0,1))]}));assert.equal(merged.sessions.length,2);checks++;
+const backup=JSON.parse(encodeBackupJSON(data));assert.equal(backup.settings.focusMinutes,80);checks++;assert.equal(backup.sessions[0].start,(first-978307200000)/1000);checks++;
+const normalized=normalizeData(backup,date(2026,4,8));assert.equal(normalized.settings.weekdayGoals[2],95);checks++;assert.equal(normalized.sessions[0].start,first);checks++;
+const merged=mergeData(normalized,normalizeData({...backup,sessions:[...backup.sessions,session('new',date(2026,4,9),date(2026,4,9,0,1))]}));assert.equal(merged.sessions.length,2);checks++;
 const duplicate=mergeData(normalized,normalized);assert.equal(duplicate.sessions.length,1);checks++;
 const reset=freshData(date(2026,4,10));reset.resetAt=date(2026,4,10);const old=mergeData(reset,normalized);assert.equal(old.sessions.length,0);checks++;
 const newer=freshData(date(2026,4,8));assert.throws(()=>normalizeData(null));checks++;assert.throws(()=>normalizeData({sessions:{}}));checks++;assert.throws(()=>normalizeData({...newer,schemaVersion:4}));checks++;
@@ -29,4 +29,9 @@ const bad=normalizeData({settings:{focusMinutes:999,weekdayGoals:{2:9999},quickD
 const tomorrow=nextTarget(9,0,date(2026,4,7,10));assert.equal(new Date(tomorrow).getDate(),8);checks++;
 assert.equal(compactDuration(90),'1h 30m');checks++;assert.equal(durationText(3661,true),'01:01:01');checks++;
 assert.equal(daysInYear(freshData(date(2024,6,1)),2024).length,366);checks++;
+const roundTrip=normalizeData(JSON.parse(encodeBackupJSON(normalized)),date(2026,4,8));
+assert.equal(roundTrip.sessions.length,1);checks++;
+assert.equal(roundTrip.sessions[0].start,first);checks++;
+assert.equal(roundTrip.sessions[0].intervals.length,1);checks++;
+assert.equal(roundTrip.settings.focusMinutes,80);checks++;
 console.log(`Passed ${checks} Ember web domain checks.`);

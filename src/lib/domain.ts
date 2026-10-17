@@ -131,7 +131,9 @@ export function normalizeData(input: unknown, now = Date.now()): StudyData {
     timerSessionID: typeof d.timerSessionID === 'string' ? d.timerSessionID : null, notifiedGoalDays: array('notifiedGoalDays').map(String),
   };
 }
-export function encodeSwiftJSON(data: StudyData) {
+// Backup files encode dates as seconds since 2001-01-01 so backups created by
+// earlier versions of Ember remain importable; normalizeData accepts both encodings.
+export function encodeBackupJSON(data: StudyData) {
   const date = (stamp: number | null) => stamp === null ? null : (stamp - 978307200000) / 1000;
   return JSON.stringify({ ...data, updatedAt: date(data.updatedAt), settingsUpdatedAt: date(data.settingsUpdatedAt), timerUpdatedAt: date(data.timerUpdatedAt), resetAt: date(data.resetAt), targetDate: date(data.targetDate), stopwatchStartedAt: date(data.stopwatchStartedAt), timerStartedAt: date(data.timerStartedAt), timerDeadline: date(data.timerDeadline), sessions: data.sessions.map(s => ({ ...s, start: date(s.start), end: date(s.end), modifiedAt: date(s.modifiedAt), intervals: s.intervals.map(i => ({ ...i, start: date(i.start), end: date(i.end) })) })) }, null, 2);
 }
